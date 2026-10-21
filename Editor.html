@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pro Code Editor (with Colors)</title>
+
+<!-- ===== PWA META (NEW) ===== -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#2ec4b6">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CodeEditor">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- ===== /PWA META ===== -->
+
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --panel: #252526;
+    --text: #d4d4d4;
+    --accent: #2ec4b6;
+    --accent-dark: #1da89a;
+    --line-num: #858585;
+    --border: #444;
+  }
+  
+  body.light-theme {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --text: #111111;
+    --accent: #1da89a;
+    --accent-dark: #16867a;
+    --line-num: #888888;
+    --border: #d8dee2;
+  }
+
+  * { box-sizing: border-box; }
+  body { 
+    margin: 0; padding: 10px; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    background: var(--bg); color: var(--text); 
+    display: flex; flex-direction: column; 
+    height: 100dvh; 
+    overflow-y: auto; 
+    padding-bottom: 30px;
+    transition: background 0.3s, color 0.3s;
+  }
+  
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+  
+  .file-input-group {
+    display: flex; flex: 1; min-width: 200px; 
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    background: var(--panel);
+  }
+  .file-input-group input[type="text"] {
+    flex: 1; padding: 8px; border: none; background: transparent; 
+    color: var(--text); font-size: 14px; outline: none; width: 100%;
+  }
+  .file-input-group select {
+    padding: 8px; border: none; border-left: 1px solid var(--border); 
+    background: var(--panel); color: var(--text); font-size: 14px; outline: none;
+    cursor: pointer; font-weight: bold;
+  }
+
+  #customExtInput {
+    padding: 8px; border: 1px solid var(--accent); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 14px; 
+    width: 100px; display: none; outline: none;
+  }
+
+  .toolbar button { 
+    padding: 8px 12px; border: none; border-radius: 6px; 
+    background: var(--accent); color: #fff; font-weight: bold; cursor: pointer; font-size: 13px;
+  }
+  .toolbar button:hover { background: var(--accent-dark); }
+  .toolbar .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .toolbar .btn-ghost:hover { background: rgba(128,128,128,0.2); }
+
+  .find-replace-panel {
+    display: none; background: var(--panel); padding: 10px; border-radius: 8px;
+    margin-bottom: 10px; border: 1px solid var(--border); gap: 8px; flex-wrap: wrap;
+    transition: background 0.3s; flex-shrink: 0;
+  }
+  .find-replace-panel input { flex: 1; min-width: 100px; padding: 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .find-replace-panel button { padding: 6px 10px; font-size: 12px; }
+
+  .editor-container {
+    flex: 1; display: flex; flex-direction: column;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; 
+    overflow: hidden; position: relative; min-height: 250px;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  
+  .code-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; }
+  
+  .line-numbers {
+    padding: 10px 5px; background: var(--bg); color: var(--line-num); 
+    font-family: monospace; font-size: 14px; line-height: 1.5; 
+    text-align: right; user-select: none; overflow: hidden;
+    border-right: 1px solid var(--border);
+    transition: background 0.3s, color 0.3s;
+    z-index: 10;
+  }
+  
+  .code-container {
+    flex: 1; display: grid; grid-template-areas: "code"; grid-template-columns: minmax(0, 1fr); overflow: hidden;
+  }
+  
+  textarea, #highlighting {
+    grid-area: code;
+    padding: 10px; border: none; margin: 0; width: 100%; height: 100%;
+    font-family: monospace; font-size: 14px; line-height: 1.5; 
+    white-space: pre; overflow: auto;
+    tab-size: 4;
+    background: transparent;
+  }
+
+  #highlighting {
+    z-index: 1; color: var(--text); pointer-events: none; display: none;
+  }
+
+  #highlighting code {
+    background: transparent !important; font-family: monospace; padding: 0 !important;
+  }
+
+  .normal-mode textarea {
+    z-index: 2; color: var(--text); caret-color: var(--text); resize: none; outline: none;
+  }
+
+  .color-mode textarea {
+    z-index: 2; color: transparent; caret-color: var(--text); resize: none; outline: none;
+  }
+  .color-mode #highlighting { display: block; }
+
+  .bottom-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; flex-shrink: 0; }
+  .bottom-actions button { flex: 1; padding: 10px; font-size: 13px; min-width: 70px;}
+  
+  .status { text-align: center; font-size: 13px; color: var(--accent); margin-top: 5px; height: 20px; flex-shrink: 0; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+
+  /* ====== PREVIEW MODAL CSS ====== */
+  .preview-modal {
+    display: none; position: fixed; inset: 0; background: var(--bg);
+    z-index: 9999; flex-direction: column;
+  }
+  .preview-header {
+    padding: 10px; background: var(--panel); color: var(--text);
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .preview-header span { font-weight: bold; color: var(--accent); }
+  .preview-header button {
+    padding: 6px 12px; border: none; border-radius: 6px;
+    background: #c82d3f; color: #fff; font-weight: bold; cursor: pointer;
+  }
+  #previewFrame {
+    flex: 1; border: none; width: 100%; height: 100%; background: #fff;
+  }
+</style>
+<link rel="stylesheet" id="hljs-theme" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="file-input-group">
+      <input type="text" id="fileName" value="new_file" placeholder="File Name">
+      <select id="fileExt" onchange="handleExtChange()">
+        <option value=".html">.html</option>
+        <option value=".txt">.txt</option>
+        <option value=".js">.js</option>
+        <option value=".css">.css</option>
+        <option value=".json">.json</option>
+        <option value=".xml">.xml</option>
+        <option value="custom">+ New...</option>
+      </select>
+    </div>
+    
+    <input type="text" id="customExtInput" placeholder=".ext" oninput="this.value = this.value.replace(/[^a-zA-Z0-9.]/g, '')">
+
+    <input type="file" id="fileInput" style="display:none" onchange="loadFileFallback(event)">
+    
+    <button class="btn-ghost" onclick="openFile()">📂 Open</button>
+    <button class="btn-ghost" onclick="toggleFindReplace()">🔍 Find</button>
+    <button class="btn-ghost" id="colorBtn" onclick="toggleColor()" style="color:#f1c40f; border-color:#f1c40f;">🎨 Colors</button>
+    <button class="btn-ghost" onclick="toggleTheme()">🌓 Theme</button>
+    <button class="btn-ghost" onclick="previewHTML()" style="color:#3498db; border-color:#3498db;">👁️ Preview</button>
+
+    <!-- ===== PWA Install Button (NEW) ===== -->
+    <button class="btn-ghost" id="installBtn" onclick="installPWA()" 
+            style="display:none; color:#27ae60; border-color:#27ae60;">⬇️ Install</button>
+  </div>
+
+  <div class="find-replace-panel" id="frPanel">
+    <input type="text" id="findInput" placeholder="Find...">
+    <input type="text" id="replaceInput" placeholder="Replace with...">
+    <button onclick="findNext()">Find Next</button>
+    <button onclick="replaceCurrent()">Replace</button>
+    <button onclick="replaceAll()">Replace All</button>
+  </div>
+
+  <div class="editor-container" id="editorContainer">
+    <div class="code-wrapper">
+      <div class="line-numbers" id="lineNumbers">1</div>
+      <div class="code-container normal-mode" id="codeContainer">
+        <pre id="highlighting" aria-hidden="true"><code class="language-html" id="highlighting-content"></code></pre>
+        <textarea id="codeArea" spellcheck="false" placeholder="Yahan apna code likhein..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="statusMsg"></div>
+
+  <div class="bottom-actions">
+    <button onclick="saveLocal()" class="btn-ghost">💾 Draft</button>
+    <button onclick="copyCode()" class="btn-ghost">📋 Copy</button>
+    <button onclick="shareCode()" style="background:#9b59b6;">📤 Share</button>
+    <button onclick="saveFile()" style="background:#e67e22;">💾 Save</button>
+    <button onclick="downloadFile()">⬇️ Download</button>
+  </div>
+
+  <div id="previewModal" class="preview-modal">
+    <div class="preview-header">
+      <span>👁️ Live Preview</span>
+      <button onclick="closePreview()">Close</button>
+    </div>
+    <iframe id="previewFrame" sandbox="allow-scripts allow-same-origin allow-modals allow-forms"></iframe>
+  </div>
+
+  <script>
+    const textarea = document.getElementById('codeArea');
+    const lineNumbers = document.getElementById('lineNumbers');
+    const fileNameInput = document.getElementById('fileName');
+    const fileExtSelect = document.getElementById('fileExt');
+    const customExtInput = document.getElementById('customExtInput');
+    const statusMsg = document.getElementById('statusMsg');
+    const frPanel = document.getElementById('frPanel');
+    const highlightingContent = document.getElementById('highlighting-content');
+    const highlightingPre = document.getElementById('highlighting');
+    const hljsTheme = document.getElementById('hljs-theme');
+    const codeContainer = document.getElementById('codeContainer');
+    
+    let isColorMode = false;
+    let currentFileHandle = null; 
+
+    function getFullFileName() {
+      let name = fileNameInput.value.trim() || "untitled";
+      let ext = fileExtSelect.value === "custom" ? customExtInput.value.trim() : fileExtSelect.value;
+      if (ext && !ext.startsWith('.')) ext = '.' + ext;
+      return name + ext;
+    }
+
+    function handleExtChange() {
+      if (fileExtSelect.value === "custom") {
+        customExtInput.style.display = "block";
+        customExtInput.focus();
+      } else {
+        customExtInput.style.display = "none";
+        customExtInput.value = ""; 
+      }
+      updateHighlight(); 
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle('light-theme');
+      const isLight = document.body.classList.contains('light-theme');
+      
+      if(isLight) {
+        hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-light.min.css";
+        localStorage.setItem('editor_theme', 'light');
+        showStatus("☀️ Light Mode ON");
+      } else {
+        hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css";
+        localStorage.setItem('editor_theme', 'dark');
+        showStatus("🌙 Dark Mode ON");
+      }
+      if(isColorMode) updateHighlight();
+    }
+
+    if (localStorage.getItem('editor_theme') === 'light') {
+      document.body.classList.add('light-theme');
+      hljsTheme.href = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-light.min.css";
+    }
+
+    function updateHighlight() {
+      if(!isColorMode) return; 
+      const code = textarea.value;
+      const fullName = getFullFileName();
+      const ext = fullName.split('.').pop().toLowerCase();
+      
+      let lang = 'html';
+      if(ext === 'js') lang = 'javascript';
+      else if(ext === 'css') lang = 'css';
+      else if(ext === 'txt') lang = 'plaintext';
+      else if(ext === 'json') lang = 'json';
+      else if(ext === 'xml') lang = 'xml';
+      
+      highlightingContent.className = 'language-' + lang;
+      highlightingContent.textContent = code + "\n"; 
+      hljs.highlightElement(highlightingContent);
+      highlightingPre.scrollTop = textarea.scrollTop;
+      highlightingPre.scrollLeft = textarea.scrollLeft;
+    }
+
+    function updateLineNumbers() {
+      const lines = textarea.value.split('\n').length;
+      let numbersHTML = '';
+      for (let i = 1; i <= lines; i++) numbersHTML += i + '<br>';
+      lineNumbers.innerHTML = numbersHTML;
+      lineNumbers.scrollTop = textarea.scrollTop;
+      if(isColorMode) updateHighlight();
+    }
+
+    textarea.addEventListener('input', updateLineNumbers);
+    textarea.addEventListener('scroll', () => {
+        lineNumbers.scrollTop = textarea.scrollTop;
+        if(isColorMode) {
+            highlightingPre.scrollTop = textarea.scrollTop;
+            highlightingPre.scrollLeft = textarea.scrollLeft;
+        }
+    });
+
+    function toggleColor() {
+        isColorMode = !isColorMode;
+        const btn = document.getElementById('colorBtn');
+        if (isColorMode) {
+            codeContainer.classList.remove('normal-mode');
+            codeContainer.classList.add('color-mode');
+            btn.textContent = "🎨 Colors ON";
+            btn.style.color = "var(--accent)";
+            btn.style.borderColor = "var(--accent)";
+            updateHighlight();
+            showStatus("🎨 Color Mode ON");
+        } else {
+            codeContainer.classList.remove('color-mode');
+            codeContainer.classList.add('normal-mode');
+            btn.textContent = "🎨 Colors OFF";
+            btn.style.color = "#f1c40f";
+            btn.style.borderColor = "#f1c40f";
+            showStatus("✏️ Normal Mode ON");
+        }
+    }
+
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = start + 4;
+        updateLineNumbers();
+      }
+    });
+
+    function loadFileContent(text, fullName) {
+        textarea.value = text;
+        const lastDot = fullName.lastIndexOf('.');
+        
+        if (lastDot !== -1) {
+          fileNameInput.value = fullName.substring(0, lastDot);
+          const extPart = fullName.substring(lastDot);
+          
+          let extExists = false;
+          for (let i = 0; i < fileExtSelect.options.length; i++) {
+            if (fileExtSelect.options[i].value === extPart) {
+              fileExtSelect.selectedIndex = i;
+              extExists = true;
+              break;
+            }
+          }
+          
+          if (!extExists) {
+            fileExtSelect.value = "custom";
+            customExtInput.value = extPart;
+            customExtInput.style.display = "block";
+          } else {
+            customExtInput.style.display = "none";
+          }
+        } else {
+          fileNameInput.value = fullName;
+          fileExtSelect.value = ".html";
+        }
+
+        updateLineNumbers(); 
+        setTimeout(() => { if(isColorMode) updateHighlight(); }, 100);
+    }
+
+    async function openFile() {
+        if (!window.showOpenFilePicker) {
+            document.getElementById('fileInput').click();
+            showStatus("Old browser: Overwrite not supported.");
+            return;
+        }
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{ description: 'Code File', accept: {'text/plain': ['.txt', '.html', '.js', '.css', '.json', '.xml']} }]
+            });
+            currentFileHandle = handle;
+            const file = await handle.getFile();
+            const text = await file.text();
+            
+            loadFileContent(text, file.name);
+            showStatus("✅ Opened: " + file.name);
+        } catch (err) {
+            if (err.name !== 'AbortError') showStatus("❌ Open failed.");
+        }
+    }
+
+    function loadFileFallback(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        currentFileHandle = null;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            loadFileContent(e.target.result, file.name);
+            showStatus("File Loaded (Read-only): " + file.name);
+        };
+        reader.readAsText(file);
+    }
+
+    async function saveFile() {
+        if (!window.showSaveFilePicker) {
+            showStatus("❌ Overwrite support nahi hai. Download use karein.");
+            downloadFile();
+            return;
+        }
+
+        if (currentFileHandle) {
+            try {
+                const writable = await currentFileHandle.createWritable();
+                await writable.write(textarea.value);
+                await writable.close();
+                showStatus("✅ File Overwritten successfully!");
+            } catch (err) {
+                showStatus("❌ Overwrite failed.");
+            }
+        } else {
+            const fileName = getFullFileName();
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [{ description: 'Code File', accept: {'text/plain': ['.txt', '.html', '.js', '.css', '.json', '.xml']} }]
+                });
+                currentFileHandle = handle;
+                const writable = await handle.createWritable();
+                await writable.write(textarea.value);
+                await writable.close();
+                showStatus("✅ File Saved!");
+            } catch (err) {
+                if (err.name !== 'AbortError') showStatus("❌ Save failed.");
+            }
+        }
+    }
+
+    function saveLocal() {
+      localStorage.setItem('editor_draft_code', textarea.value);
+      localStorage.setItem('editor_draft_name', fileNameInput.value);
+      localStorage.setItem('editor_draft_ext', fileExtSelect.value);
+      localStorage.setItem('editor_draft_custom_ext', customExtInput.value);
+      showStatus("✅ Draft Saved!");
+    }
+
+    window.onload = function() {
+      const savedCode = localStorage.getItem('editor_draft_code');
+      if (savedCode) {
+        textarea.value = savedCode;
+        fileNameInput.value = localStorage.getItem('editor_draft_name') || 'new_file';
+        
+        const savedExt = localStorage.getItem('editor_draft_ext');
+        if(savedExt) {
+            fileExtSelect.value = savedExt;
+            if(savedExt === 'custom') {
+                customExtInput.value = localStorage.getItem('editor_draft_custom_ext') || '';
+                customExtInput.style.display = "block";
+            }
+        }
+
+        updateLineNumbers();
+        setTimeout(() => { if(isColorMode) updateHighlight(); }, 100);
+        showStatus("Draft Restored.");
+      }
+    };
+
+    function downloadFile() {
+      const fileName = getFullFileName();
+      const blob = new Blob([textarea.value], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showStatus("⬇️ Downloaded: " + fileName);
+    }
+
+    function copyCode() {
+      textarea.select();
+      document.execCommand('copy');
+      showStatus("📋 Code Copied!");
+    }
+
+    async function shareCode() {
+        const code = textarea.value;
+        if(!code.trim()) {
+            showStatus("❌ Code empty hai! Share nahi ho sakta.");
+            return;
+        }
+
+        const fileName = getFullFileName();
+
+        if (navigator.canShare) {
+            try {
+                const file = new File([code], fileName, { type: 'text/plain' });
+                
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: fileName,
+                        text: 'Check out this code file!'
+                    });
+                    showStatus("✅ Shared successfully!");
+                    return;
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error("Share failed:", err);
+                } else {
+                    return;
+                }
+            }
+        }
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: fileName,
+                    text: code
+                });
+                showStatus("✅ Code shared as text!");
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') console.error("Text share failed:", err);
+                else return;
+            }
+        }
+
+        copyCode();
+        showStatus("❌ Share not supported. Code copied instead!");
+    }
+
+    function previewHTML() {
+      const code = textarea.value;
+      if(!code.trim()){
+          showStatus("❌ Code empty hai! Preview nahi khul sakta.");
+          return;
+      }
+      
+      let finalCode = code;
+      const metaTag = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
+      
+      if (finalCode.match(/<head>/i)) {
+          finalCode = finalCode.replace(/<head>/i, `<head>\n${metaTag}\n`);
+      } else {
+          finalCode = metaTag + "\n" + finalCode;
+      }
+
+      const frame = document.getElementById('previewFrame');
+      frame.srcdoc = finalCode;
+      
+      document.getElementById('previewModal').style.display = 'flex';
+      showStatus("👁️ Preview Opened!");
+    }
+
+    function closePreview() {
+      document.getElementById('previewModal').style.display = 'none';
+      document.getElementById('previewFrame').srcdoc = '';
+    }
+
+    function toggleFindReplace() {
+      frPanel.style.display = frPanel.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    function findNext() {
+      const findText = document.getElementById('findInput').value;
+      if (!findText) return;
+      const text = textarea.value;
+      let startPos = textarea.selectionEnd;
+      let index = text.indexOf(findText, startPos);
+      if (index === -1 && startPos > 0) index = text.indexOf(findText, 0);
+      
+      if (index !== -1) {
+        textarea.focus();
+        textarea.setSelectionRange(index, index + findText.length);
+        const lineHeight = 21; 
+        const linesBefore = text.substring(0, index).split('\n').length;
+        textarea.scrollTop = Math.max(0, (linesBefore - 3) * lineHeight);
+        if(isColorMode) updateHighlight();
+        showStatus("Found!");
+      } else {
+        showStatus("❌ Not found.");
+      }
+    }
+
+    function replaceCurrent() {
+      const findText = document.getElementById('findInput').value;
+      const replaceText = document.getElementById('replaceInput').value;
+      if (!findText) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      if (textarea.value.substring(start, end) === findText) {
+        textarea.setRangeText(replaceText, start, end, "end");
+        updateLineNumbers();
+        showStatus("✅ Replaced 1.");
+        saveLocal();
+      } else {
+        findNext(); 
+      }
+    }
+
+    function replaceAll() {
+      const findText = document.getElementById('findInput').value;
+      const replaceText = document.getElementById('replaceInput').value;
+      if (!findText) return;
+      const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      const matches = textarea.value.match(regex);
+      
+      if (matches) {
+        textarea.value = textarea.value.replace(regex, replaceText);
+        updateLineNumbers();
+        saveLocal();
+        showStatus(`✅ Replaced ${matches.length} occurrences.`);
+      } else {
+        showStatus("❌ Not found.");
+      }
+    }
+
+    function showStatus(msg) {
+      statusMsg.textContent = msg;
+      setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+    }
+
+    /* =========================================================
+       PWA FEATURES (NEW) — purana logic untouched
+       ========================================================= */
+    let deferredInstallPrompt = null;
+
+    // Service Worker register
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+
+    // Install prompt capture
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const btn = document.getElementById('installBtn');
+      if (btn) btn.style.display = 'inline-block';
+    });
+
+    // Install button click
+    async function installPWA() {
+      if (!deferredInstallPrompt) {
+        showStatus('ℹ️ Install not available');
+        return;
+      }
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      showStatus(outcome === 'accepted' ? '✅ App installed!' : '❌ Install dismissed');
+      deferredInstallPrompt = null;
+      document.getElementById('installBtn').style.display = 'none';
+    }
+
+    // Installed confirmation
+    window.addEventListener('appinstalled', () => {
+      showStatus('✅ App installed to home screen!');
+      document.getElementById('installBtn').style.display = 'none';
+    });
+
+    // Auto system theme follow (sirf jab user ne manually toggle na kiya ho)
+    (function autoSystemTheme() {
+      const saved = localStorage.getItem('editor_theme');
+      const mq = window.matchMedia('(prefers-color-scheme: light)');
+
+      function apply(isLight) {
+        if (isLight === document.body.classList.contains('light-theme')) return;
+        document.body.classList.toggle('light-theme', isLight);
+        hljsTheme.href = isLight
+          ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-light.min.css'
+          : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css';
+        if (typeof isColorMode !== 'undefined' && isColorMode) updateHighlight();
+      }
+
+      if (!saved) {
+        apply(mq.matches);
+        mq.addEventListener('change', (e) => apply(e.matches));
+      }
+    })();
+  </script>
+</body>
+</html>
